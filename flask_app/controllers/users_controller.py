@@ -5,6 +5,8 @@ from flask_app import app
 from flask_app.models.users import User
 
 #Importando BCrypt (encriptar)
+from flask_bcrypt import Bcrypt
+bcrypt = Bcrypt(app) #inicializando instancia de Bcrypt
 
 @app.route('/')
 def index():
@@ -13,12 +15,60 @@ def index():
 #Creando una ruta para /register
 @app.route('/register', methods=['POST'])
 def register():
+    #request.form = {
+    #   "first_name": "Elena",
+    #   "last_name": "De Troya",
+    #   "email": "elena@cd.com",
+    #   "password": "123456",
+    #}
     if not User.valida_usuario(request.form):
         return redirect('/')
 
-    User.save(request.form)
+    pwd = bcrypt.generate_password_hash(request.form['password']) #Me encripta el password
+
+    formulario = {
+        "first_name": request.form['first_name'],
+        "last_name": request.form['last_name'],
+        "email": request.form['email'],
+        "password": pwd
+    }
+
+    id = User.save(formulario) #Guardando a mi usuario y recibo el ID del nuevo registro
+
+    session['usuario_id'] = id #Guardando en sesion el identificador
+
+    return redirect('/dashboard')
+
+@app.route('/login', methods=['POST'])
+def login():
+    user = User.get_by_email(request.form)
+    if not user: #si user=False
+        flash("E-mail no encontrado", 'login')
+        return redirect('/')
+    
+    #Comparando la contraseña encriptada con la contraseña del LOGIN
+    if not bcrypt.check_password_hash(user.password, request.form['password']):
+        flash("Password incorrecto", 'login')
+        return redirect('/')
+    
+    session['usuario_id'] = user.id
+
     return redirect('/dashboard')
 
 @app.route('/dashboard')
 def dashboard():
-    return render_template('dashboard.html')
+    if 'usuario_id' not in session:
+        return redirect('/')
+
+    formulario = {
+        "id": session['usuario_id']
+    }
+
+    user = User.get_by_id(formulario)
+
+    return render_template('dashboard.html', user=user)
+
+@app.route('/logout')
+def logout():
+    session.clear() #Elimine la sesión
+    return redirect('/')
